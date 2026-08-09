@@ -80,8 +80,8 @@ func (c *Client) TriggerGravity() error {
 	return nil
 }
 
-func (c *Client) DeleteList(id int, listType string) error {
-	path := fmt.Sprintf("/api/lists/%d?type=%s", id, listType)
+func (c *Client) DeleteList(address string, listType string) error {
+	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(address), listType)
 	result, err := c.Request(http.MethodDelete, path, nil)
 	if err != nil {
 		return err

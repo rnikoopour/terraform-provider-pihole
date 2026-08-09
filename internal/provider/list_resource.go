@@ -231,7 +231,7 @@ func (r *ListResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	if err := r.client.DeleteList(list.ID, list.Type); err != nil {
+	if err := r.client.DeleteList(list.Address, list.Type); err != nil {
 		resp.Diagnostics.AddError("failed to delete list", err.Error())
 	}
 }
