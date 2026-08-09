@@ -29,9 +29,17 @@ func NewClient(baseURL, password string, insecure bool) *Client {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec
 	}
 	return &Client{
-		BaseURL:    baseURL,
-		password:   password,
-		httpClient: &http.Client{Transport: transport},
+		BaseURL:  baseURL,
+		password: password,
+		// Client.Request holds c.mu for the full call, serializing every
+		// operation against this provider instance. Without a timeout here,
+		// a single request that hangs server-side (FTL wedged, network
+		// blip) blocks every other resource for this instance forever
+		// instead of failing fast. 5 minutes accommodates a real gravity
+		// update (fetches + processes every configured blocklist, which
+		// can legitimately take minutes) while still catching genuine
+		// hangs.
+		httpClient: &http.Client{Transport: transport, Timeout: 5 * time.Minute},
 	}
 }
 
