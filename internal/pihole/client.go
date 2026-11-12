@@ -29,11 +29,38 @@ func NewClient(in *NewClientInput) *Client {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: in.Insecure}, //nolint:gosec
 	}
-	return &Client{
+	c := &Client{
 		BaseURL:    in.BaseURL,
 		password:   in.Password,
 		httpClient: &http.Client{Transport: transport, Timeout: 5 * time.Minute},
 	}
+
+	registryMu.Lock()
+	registry = append(registry, c)
+	registryMu.Unlock()
+
+	return c
+}
+
+var (
+	registryMu sync.Mutex
+	registry   []*Client
+)
+
+// CloseAll logs out every client created in this process. Terraform starts one
+// provider instance per Pi-hole server, and each session it opens counts
+// against Pi-hole's API seat limit until it expires, so logging out at shutdown
+// frees the seats immediately.
+func CloseAll(ctx context.Context) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	for _, c := range registry {
+		c.mu.Lock()
+		c.logout(ctx)
+		c.mu.Unlock()
+	}
+	registry = nil
 }
 
 func (c *Client) logout(ctx context.Context) {

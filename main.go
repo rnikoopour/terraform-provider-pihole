@@ -4,8 +4,10 @@ import (
 	"context"
 	"flag"
 	"log"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/rnikoopour/terraform-provider-pihole/internal/pihole"
 	"github.com/rnikoopour/terraform-provider-pihole/internal/provider"
 )
 
@@ -22,6 +24,13 @@ func main() {
 	}
 
 	err := providerserver.Serve(context.Background(), provider.New(version), opts)
+
+	// Terraform closes the provider process after every run, so this is the
+	// last chance to hand the API sessions back to Pi-hole.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	pihole.CloseAll(ctx)
+	cancel()
+
 	if err != nil {
 		log.Fatal(err.Error())
 	}
