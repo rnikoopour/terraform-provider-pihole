@@ -11,6 +11,7 @@ A Terraform provider for managing Pi-hole v6 configuration.
 - `pihole_cname_record` — Custom local CNAME records
 - `pihole_gravity` — Triggers a gravity update; use `replace_triggered_by` to run it after list/domain changes
 - `pihole_group` — Groups for organizing lists and domains
+- `pihole_client` — Client records, for scoping groups (and therefore list/domain entries) to specific hosts
 
 ## Configuration notes
 
