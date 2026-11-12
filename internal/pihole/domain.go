@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 )
 
 type Domain struct {
@@ -75,7 +74,7 @@ func (c *Client) UpdateDomain(in *UpdateDomainInput) error {
 }
 
 func (c *Client) DeleteDomain(in *DeleteDomainInput) error {
-	path := fmt.Sprintf("/api/domains/%s/%s/%s", in.Type, in.Kind, url.PathEscape(in.Domain))
+	path := fmt.Sprintf("/api/domains/%s/%s/%s", in.Type, in.Kind, escapePathSegment(in.Domain))
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err

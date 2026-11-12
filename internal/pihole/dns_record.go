@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 )
 
 // DNSRecord represents a custom local DNS A/AAAA record ("IP hostname").
@@ -65,7 +64,7 @@ func (c *Client) GetDNSRecord(in *GetDNSRecordInput) (*GetDNSRecordOutput, error
 }
 
 func (c *Client) CreateDNSRecord(in *CreateDNSRecordInput) error {
-	path := "/api/config/dns/hosts/" + url.PathEscape(in.Record.String())
+	path := "/api/config/dns/hosts/" + escapePathSegment(in.Record.String())
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path})
 	if err != nil {
 		return err
@@ -78,7 +77,7 @@ func (c *Client) CreateDNSRecord(in *CreateDNSRecordInput) error {
 
 func (c *Client) DeleteDNSRecord(in *DeleteDNSRecordInput) error {
 	// Pi-hole v6 uses dns%2Fhosts (encoded slash) for the delete path.
-	path := "/api/config/dns%2Fhosts/" + url.PathEscape(in.Record.String())
+	path := "/api/config/dns%2Fhosts/" + escapePathSegment(in.Record.String())
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err

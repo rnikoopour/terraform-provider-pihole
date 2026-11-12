@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -61,7 +60,7 @@ func (c *Client) GetCNAMERecord(in *GetCNAMERecordInput) (*GetCNAMERecordOutput,
 }
 
 func (c *Client) CreateCNAMERecord(in *CreateCNAMERecordInput) error {
-	path := "/api/config/dns/cnameRecords/" + url.PathEscape(in.Record.String())
+	path := "/api/config/dns/cnameRecords/" + escapePathSegment(in.Record.String())
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path})
 	if err != nil {
 		return err
@@ -73,7 +72,7 @@ func (c *Client) CreateCNAMERecord(in *CreateCNAMERecordInput) error {
 }
 
 func (c *Client) DeleteCNAMERecord(in *DeleteCNAMERecordInput) error {
-	path := "/api/config/dns%2FcnameRecords/" + url.PathEscape(in.Record.String())
+	path := "/api/config/dns%2FcnameRecords/" + escapePathSegment(in.Record.String())
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err

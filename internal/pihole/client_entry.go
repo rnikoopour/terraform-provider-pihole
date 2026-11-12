@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 )
 
 // ClientEntry is a Pi-hole client record used for group-scoped blocking.
@@ -93,7 +92,7 @@ func (c *Client) CreateClient(in *CreateClientInput) (*CreateClientOutput, error
 }
 
 func (c *Client) UpdateClient(in *UpdateClientInput) error {
-	path := "/api/clients/" + url.PathEscape(in.Addr)
+	path := "/api/clients/" + escapePathSegment(in.Addr)
 	// Only comment and groups are mutable; the identifier lives in the path.
 	payload := map[string]any{
 		"comment": in.Entry.Comment,
@@ -110,7 +109,7 @@ func (c *Client) UpdateClient(in *UpdateClientInput) error {
 }
 
 func (c *Client) DeleteClient(in *DeleteClientInput) error {
-	path := "/api/clients/" + url.PathEscape(in.Addr)
+	path := "/api/clients/" + escapePathSegment(in.Addr)
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err

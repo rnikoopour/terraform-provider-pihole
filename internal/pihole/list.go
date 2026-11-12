@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 )
 
 type List struct {
@@ -65,7 +64,7 @@ func (c *Client) CreateList(in *CreateListInput) (*CreateListOutput, error) {
 }
 
 func (c *Client) UpdateList(in *UpdateListInput) error {
-	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(in.List.Address), in.List.Type)
+	path := fmt.Sprintf("/api/lists/%s?type=%s", escapePathSegment(in.List.Address), in.List.Type)
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path, Body: in.List})
 	if err != nil {
 		return err
@@ -88,7 +87,7 @@ func (c *Client) TriggerGravity(in *TriggerGravityInput) error {
 }
 
 func (c *Client) DeleteList(in *DeleteListInput) error {
-	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(in.Address), in.Type)
+	path := fmt.Sprintf("/api/lists/%s?type=%s", escapePathSegment(in.Address), in.Type)
 	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err
