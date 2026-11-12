@@ -55,7 +55,11 @@ func (p *PiholeProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	}
 
 	insecure := !config.Insecure.IsNull() && config.Insecure.ValueBool()
-	client := pihole.NewClient(config.URL.ValueString(), config.Password.ValueString(), insecure)
+	client := pihole.NewClient(&pihole.NewClientInput{
+		BaseURL:  config.URL.ValueString(),
+		Password: config.Password.ValueString(),
+		Insecure: insecure,
+	})
 
 	resp.DataSourceData = client
 	resp.ResourceData = client

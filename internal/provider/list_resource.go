@@ -111,12 +111,15 @@ func (r *ListResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	list, err := r.client.CreateList(pihole.List{
-		Address: plan.Address.ValueString(),
-		Type:    plan.Type.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
-		Comment: plan.Comment.ValueString(),
-		Groups:  groupIDs,
+	list, err := r.client.CreateList(&pihole.CreateListInput{
+		Ctx: ctx,
+		List: pihole.List{
+			Address: plan.Address.ValueString(),
+			Type:    plan.Type.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+			Comment: plan.Comment.ValueString(),
+			Groups:  groupIDs,
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to create list", err.Error())
@@ -124,7 +127,7 @@ func (r *ListResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 
 	plan.ID = plan.Address
-	plan.Comment = types.StringValue(list.Comment)
+	plan.Comment = types.StringValue(list.List.Comment)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -135,24 +138,25 @@ func (r *ListResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	list, err := r.client.GetListByAddress(state.Address.ValueString())
+	out, err := r.client.GetListByAddress(&pihole.GetListByAddressInput{Ctx: ctx, Address: state.Address.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read list", err.Error())
 		return
 	}
-	if list == nil {
+	if out.List == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
+	list := out.List
 
-	groupNames, err := r.client.ResolveGroupIDs(list.Groups)
+	groupNames, err := r.client.ResolveGroupIDs(&pihole.ResolveGroupIDsInput{Ctx: ctx, IDs: list.Groups})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to resolve group IDs", err.Error())
 		return
 	}
 
-	groupVals := make([]attr.Value, len(groupNames))
-	for i, n := range groupNames {
+	groupVals := make([]attr.Value, len(groupNames.Names))
+	for i, n := range groupNames.Names {
 		groupVals[i] = types.StringValue(n)
 	}
 	groups, diags := types.SetValue(types.StringType, groupVals)
@@ -175,12 +179,12 @@ func (r *ListResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	list, err := r.client.GetListByAddress(plan.Address.ValueString())
+	found, err := r.client.GetListByAddress(&pihole.GetListByAddressInput{Ctx: ctx, Address: plan.Address.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to look up list for update", err.Error())
 		return
 	}
-	if list == nil {
+	if found.List == nil {
 		resp.Diagnostics.AddError("list not found", plan.Address.ValueString())
 		return
 	}
@@ -191,25 +195,28 @@ func (r *ListResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	err = r.client.UpdateList(list.ID, pihole.List{
-		Address: plan.Address.ValueString(),
-		Type:    plan.Type.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
-		Comment: plan.Comment.ValueString(),
-		Groups:  groupIDs,
+	err = r.client.UpdateList(&pihole.UpdateListInput{
+		Ctx: ctx,
+		List: pihole.List{
+			Address: plan.Address.ValueString(),
+			Type:    plan.Type.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+			Comment: plan.Comment.ValueString(),
+			Groups:  groupIDs,
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to update list", err.Error())
 		return
 	}
 
-	updated, err := r.client.GetListByAddress(plan.Address.ValueString())
+	updated, err := r.client.GetListByAddress(&pihole.GetListByAddressInput{Ctx: ctx, Address: plan.Address.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read list after update", err.Error())
 		return
 	}
-	if updated != nil {
-		plan.Comment = types.StringValue(updated.Comment)
+	if updated.List != nil {
+		plan.Comment = types.StringValue(updated.List.Comment)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -222,16 +229,20 @@ func (r *ListResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	list, err := r.client.GetListByAddress(state.Address.ValueString())
+	found, err := r.client.GetListByAddress(&pihole.GetListByAddressInput{Ctx: ctx, Address: state.Address.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to look up list for delete", err.Error())
 		return
 	}
-	if list == nil {
+	if found.List == nil {
 		return
 	}
 
-	if err := r.client.DeleteList(list.Address, list.Type); err != nil {
+	if err := r.client.DeleteList(&pihole.DeleteListInput{
+		Ctx:     ctx,
+		Address: found.List.Address,
+		Type:    found.List.Type,
+	}); err != nil {
 		resp.Diagnostics.AddError("failed to delete list", err.Error())
 	}
 }
@@ -247,5 +258,9 @@ func (r *ListResource) resolveGroups(ctx context.Context, groups types.Set) ([]i
 	if diags.HasError() {
 		return nil, fmt.Errorf("failed to extract group names")
 	}
-	return r.client.ResolveGroupNames(names)
+	out, err := r.client.ResolveGroupNames(&pihole.ResolveGroupNamesInput{Ctx: ctx, Names: names})
+	if err != nil {
+		return nil, err
+	}
+	return out.IDs, nil
 }

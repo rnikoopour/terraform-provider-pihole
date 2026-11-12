@@ -76,7 +76,7 @@ func (r *CNAMERecordResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	rec := pihole.CNAMERecord{Domain: plan.Domain.ValueString(), Target: plan.Target.ValueString()}
-	if err := r.client.CreateCNAMERecord(rec); err != nil {
+	if err := r.client.CreateCNAMERecord(&pihole.CreateCNAMERecordInput{Ctx: ctx, Record: rec}); err != nil {
 		resp.Diagnostics.AddError("failed to create CNAME record", err.Error())
 		return
 	}
@@ -92,17 +92,17 @@ func (r *CNAMERecordResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	rec, err := r.client.GetCNAMERecord(state.Domain.ValueString())
+	out, err := r.client.GetCNAMERecord(&pihole.GetCNAMERecordInput{Ctx: ctx, Domain: state.Domain.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read CNAME record", err.Error())
 		return
 	}
-	if rec == nil {
+	if out.Record == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	state.Target = types.StringValue(rec.Target)
+	state.Target = types.StringValue(out.Record.Target)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -123,7 +123,7 @@ func (r *CNAMERecordResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 
 	rec := pihole.CNAMERecord{Domain: state.Domain.ValueString(), Target: state.Target.ValueString()}
-	if err := r.client.DeleteCNAMERecord(rec); err != nil {
+	if err := r.client.DeleteCNAMERecord(&pihole.DeleteCNAMERecordInput{Ctx: ctx, Record: rec}); err != nil {
 		resp.Diagnostics.AddError("failed to delete CNAME record", err.Error())
 	}
 }

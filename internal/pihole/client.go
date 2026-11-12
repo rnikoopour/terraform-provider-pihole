@@ -2,6 +2,7 @@ package pihole
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -19,35 +20,27 @@ type Client struct {
 	mu         sync.Mutex
 }
 
-type requestResult struct {
-	Body       []byte
-	StatusCode int
-}
-
-func NewClient(baseURL, password string, insecure bool) *Client {
+// NewClient builds a client with a bounded HTTP timeout. Request holds c.mu for
+// the full call, serializing every operation against this provider instance;
+// without a timeout a server-side hang would block every other resource for
+// this instance forever. Five minutes accommodates a real gravity update
+// (fetching + processing every blocklist) while still catching genuine hangs.
+func NewClient(in *NewClientInput) *Client {
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: in.Insecure}, //nolint:gosec
 	}
 	return &Client{
-		BaseURL:  baseURL,
-		password: password,
-		// Client.Request holds c.mu for the full call, serializing every
-		// operation against this provider instance. Without a timeout here,
-		// a single request that hangs server-side (FTL wedged, network
-		// blip) blocks every other resource for this instance forever
-		// instead of failing fast. 5 minutes accommodates a real gravity
-		// update (fetches + processes every configured blocklist, which
-		// can legitimately take minutes) while still catching genuine
-		// hangs.
+		BaseURL:    in.BaseURL,
+		password:   in.Password,
 		httpClient: &http.Client{Transport: transport, Timeout: 5 * time.Minute},
 	}
 }
 
-func (c *Client) logout() {
+func (c *Client) logout(ctx context.Context) {
 	if c.sid == "" {
 		return
 	}
-	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/api/auth", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.BaseURL+"/api/auth", nil)
 	if err == nil {
 		req.Header.Set("X-FTL-SID", c.sid)
 		resp, err := c.httpClient.Do(req)
@@ -58,7 +51,7 @@ func (c *Client) logout() {
 	c.sid = ""
 }
 
-func (c *Client) authenticate() error {
+func (c *Client) authenticate(ctx context.Context) error {
 	body, err := json.Marshal(map[string]string{"password": c.password})
 	if err != nil {
 		return fmt.Errorf("marshal auth body: %w", err)
@@ -70,7 +63,14 @@ func (c *Client) authenticate() error {
 			time.Sleep(time.Duration(attempt*2) * time.Second)
 		}
 
-		resp, err := c.httpClient.Post(c.BaseURL+"/api/auth", "application/json", bytes.NewBuffer(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/auth", bytes.NewBuffer(body))
+		if err != nil {
+			lastErr = fmt.Errorf("create auth request to %s: %w", c.BaseURL, err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("auth request to %s: %w", c.BaseURL, err)
 			continue
@@ -98,40 +98,59 @@ func (c *Client) authenticate() error {
 	return lastErr
 }
 
-func (c *Client) Request(method, path string, body interface{}) (*requestResult, error) {
+// Request serializes all calls against this client instance so a shared session
+// id is never raced.
+func (c *Client) Request(in *RequestInput) (*RequestOutput, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.doRequest(method, path, body, true)
+	return c.doRequest(&doRequestInput{
+		Ctx:    in.Ctx,
+		Method: in.Method,
+		Path:   in.Path,
+		Body:   in.Body,
+		Retry:  true,
+	})
 }
 
-func (c *Client) doRequest(method, path string, body interface{}, retry bool) (*requestResult, error) {
+// doRequestInput is the package-private form of RequestInput plus the
+// single-retry flag used after a session expiry.
+type doRequestInput struct {
+	Ctx    context.Context
+	Method string
+	Path   string
+	Body   any
+	Retry  bool
+}
+
+func (c *Client) doRequest(in *doRequestInput) (*RequestOutput, error) {
+	ctx := ctxOrBackground(in.Ctx)
 	if c.sid == "" {
-		if err := c.authenticate(); err != nil {
+		if err := c.authenticate(ctx); err != nil {
 			return nil, err
 		}
 	}
 
 	var bodyReader io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
+	if in.Body != nil {
+		b, err := json.Marshal(in.Body)
 		if err != nil {
 			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
 		bodyReader = bytes.NewBuffer(b)
 	}
 
-	req, err := http.NewRequest(method, c.BaseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, in.Method, c.BaseURL+in.Path, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("X-FTL-SID", c.sid)
-	if body != nil {
+	if in.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request to %s%s: %w", c.BaseURL, path, err)
+		return nil, fmt.Errorf("execute request to %s%s: %w", c.BaseURL, in.Path, err)
 	}
 	defer resp.Body.Close()
 
@@ -140,10 +159,16 @@ func (c *Client) doRequest(method, path string, body interface{}, retry bool) (*
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized && retry {
-		c.logout()
-		return c.doRequest(method, path, body, false)
+	if resp.StatusCode == http.StatusUnauthorized && in.Retry {
+		c.logout(ctx)
+		return c.doRequest(&doRequestInput{
+			Ctx:    ctx,
+			Method: in.Method,
+			Path:   in.Path,
+			Body:   in.Body,
+			Retry:  false,
+		})
 	}
 
-	return &requestResult{Body: respBody, StatusCode: resp.StatusCode}, nil
+	return &RequestOutput{StatusCode: resp.StatusCode, Body: respBody}, nil
 }

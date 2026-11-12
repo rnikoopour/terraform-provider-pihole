@@ -78,7 +78,7 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	rec := pihole.DNSRecord{IP: plan.IP.ValueString(), Hostname: plan.Hostname.ValueString()}
-	if err := r.client.CreateDNSRecord(rec); err != nil {
+	if err := r.client.CreateDNSRecord(&pihole.CreateDNSRecordInput{Ctx: ctx, Record: rec}); err != nil {
 		resp.Diagnostics.AddError("failed to create DNS record", err.Error())
 		return
 	}
@@ -94,12 +94,16 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	rec, err := r.client.GetDNSRecord(state.IP.ValueString(), state.Hostname.ValueString())
+	out, err := r.client.GetDNSRecord(&pihole.GetDNSRecordInput{
+		Ctx:      ctx,
+		IP:       state.IP.ValueString(),
+		Hostname: state.Hostname.ValueString(),
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read DNS record", err.Error())
 		return
 	}
-	if rec == nil {
+	if out.Record == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -131,7 +135,7 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	rec := pihole.DNSRecord{IP: state.IP.ValueString(), Hostname: state.Hostname.ValueString()}
-	if err := r.client.DeleteDNSRecord(rec); err != nil {
+	if err := r.client.DeleteDNSRecord(&pihole.DeleteDNSRecordInput{Ctx: ctx, Record: rec}); err != nil {
 		resp.Diagnostics.AddError("failed to delete DNS record", err.Error())
 	}
 }

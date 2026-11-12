@@ -59,8 +59,8 @@ type ServerConfig struct {
 	MaxDBDays       int
 }
 
-func (c *Client) GetServerConfig() (*ServerConfig, error) {
-	result, err := c.Request(http.MethodGet, "/api/config", nil)
+func (c *Client) GetServerConfig(in *GetServerConfigInput) (*GetServerConfigOutput, error) {
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodGet, Path: "/api/config"})
 	if err != nil {
 		return nil, err
 	}
@@ -88,36 +88,36 @@ func (c *Client) GetServerConfig() (*ServerConfig, error) {
 	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		return nil, fmt.Errorf("parse config response: %w", err)
 	}
-	return &ServerConfig{
+	return &GetServerConfigOutput{Config: &ServerConfig{
 		DNS:             resp.Config.DNS,
 		WebserverDomain: resp.Config.Webserver.Domain,
 		Theme:           resp.Config.Webserver.Interface.Theme,
 		Boxed:           resp.Config.Webserver.Interface.Boxed,
 		PrivacyLevel:    resp.Config.Misc.PrivacyLevel,
 		MaxDBDays:       resp.Config.Database.MaxDBDays,
-	}, nil
+	}}, nil
 }
 
-func (c *Client) UpdateServerConfig(cfg *ServerConfig) error {
+func (c *Client) UpdateServerConfig(in *UpdateServerConfigInput) error {
 	payload := map[string]any{
 		"config": map[string]any{
-			"dns": cfg.DNS,
+			"dns": in.Config.DNS,
 			"webserver": map[string]any{
-				"domain": cfg.WebserverDomain,
+				"domain": in.Config.WebserverDomain,
 				"interface": map[string]any{
-					"theme": cfg.Theme,
-					"boxed": cfg.Boxed,
+					"theme": in.Config.Theme,
+					"boxed": in.Config.Boxed,
 				},
 			},
 			"misc": map[string]any{
-				"privacylevel": cfg.PrivacyLevel,
+				"privacylevel": in.Config.PrivacyLevel,
 			},
 			"database": map[string]any{
-				"maxDBdays": cfg.MaxDBDays,
+				"maxDBdays": in.Config.MaxDBDays,
 			},
 		},
 	}
-	result, err := c.Request(http.MethodPatch, "/api/config", payload)
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPatch, Path: "/api/config", Body: payload})
 	if err != nil {
 		return err
 	}

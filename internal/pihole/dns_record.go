@@ -22,8 +22,8 @@ type parseHostOutput struct {
 	Hostname string
 }
 
-func (c *Client) ListDNSRecords() ([]DNSRecord, error) {
-	result, err := c.Request(http.MethodGet, "/api/config/dns/hosts", nil)
+func (c *Client) ListDNSRecords(in *ListDNSRecordsInput) (*ListDNSRecordsOutput, error) {
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodGet, Path: "/api/config/dns/hosts"})
 	if err != nil {
 		return nil, err
 	}
@@ -47,26 +47,26 @@ func (c *Client) ListDNSRecords() ([]DNSRecord, error) {
 			records = append(records, DNSRecord{IP: out.IP, Hostname: out.Hostname})
 		}
 	}
-	return records, nil
+	return &ListDNSRecordsOutput{Records: records}, nil
 }
 
-func (c *Client) GetDNSRecord(ip, hostname string) (*DNSRecord, error) {
-	records, err := c.ListDNSRecords()
+// GetDNSRecord matches the exact IP/hostname pair; a nil Record means no match.
+func (c *Client) GetDNSRecord(in *GetDNSRecordInput) (*GetDNSRecordOutput, error) {
+	out, err := c.ListDNSRecords(&ListDNSRecordsInput{Ctx: in.Ctx})
 	if err != nil {
 		return nil, err
 	}
-	for i := range records {
-		if records[i].IP == ip && records[i].Hostname == hostname {
-			return &records[i], nil
+	for i := range out.Records {
+		if out.Records[i].IP == in.IP && out.Records[i].Hostname == in.Hostname {
+			return &GetDNSRecordOutput{Record: &out.Records[i]}, nil
 		}
 	}
-	return nil, nil
+	return &GetDNSRecordOutput{}, nil
 }
 
-func (c *Client) CreateDNSRecord(r DNSRecord) error {
-	entry := r.String()
-	path := "/api/config/dns/hosts/" + url.PathEscape(entry)
-	result, err := c.Request(http.MethodPut, path, nil)
+func (c *Client) CreateDNSRecord(in *CreateDNSRecordInput) error {
+	path := "/api/config/dns/hosts/" + url.PathEscape(in.Record.String())
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path})
 	if err != nil {
 		return err
 	}
@@ -76,11 +76,10 @@ func (c *Client) CreateDNSRecord(r DNSRecord) error {
 	return nil
 }
 
-func (c *Client) DeleteDNSRecord(r DNSRecord) error {
-	entry := r.String()
-	// Pi-hole v6 uses dns%2Fhosts (encoded slash) for the delete path
-	path := "/api/config/dns%2Fhosts/" + url.PathEscape(entry)
-	result, err := c.Request(http.MethodDelete, path, nil)
+func (c *Client) DeleteDNSRecord(in *DeleteDNSRecordInput) error {
+	// Pi-hole v6 uses dns%2Fhosts (encoded slash) for the delete path.
+	path := "/api/config/dns%2Fhosts/" + url.PathEscape(in.Record.String())
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err
 	}

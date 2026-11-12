@@ -16,8 +16,9 @@ type List struct {
 	Groups  []int  `json:"groups,omitempty"`
 }
 
-func (c *Client) GetListByAddress(address string) (*List, error) {
-	result, err := c.Request(http.MethodGet, "/api/lists", nil)
+// GetListByAddress returns a nil List in the output when no matching list exists.
+func (c *Client) GetListByAddress(in *GetListByAddressInput) (*GetListByAddressOutput, error) {
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodGet, Path: "/api/lists"})
 	if err != nil {
 		return nil, err
 	}
@@ -31,15 +32,20 @@ func (c *Client) GetListByAddress(address string) (*List, error) {
 		return nil, fmt.Errorf("parse lists response: %w", err)
 	}
 	for i := range resp.Lists {
-		if resp.Lists[i].Address == address {
-			return &resp.Lists[i], nil
+		if resp.Lists[i].Address == in.Address {
+			return &GetListByAddressOutput{List: &resp.Lists[i]}, nil
 		}
 	}
-	return nil, nil
+	return &GetListByAddressOutput{}, nil
 }
 
-func (c *Client) CreateList(list List) (*List, error) {
-	result, err := c.Request(http.MethodPost, "/api/lists?type="+list.Type, list)
+func (c *Client) CreateList(in *CreateListInput) (*CreateListOutput, error) {
+	result, err := c.Request(&RequestInput{
+		Ctx:    in.Ctx,
+		Method: http.MethodPost,
+		Path:   "/api/lists?type=" + in.List.Type,
+		Body:   in.List,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -55,22 +61,23 @@ func (c *Client) CreateList(list List) (*List, error) {
 	if len(resp.Lists) == 0 {
 		return nil, fmt.Errorf("create list response contained no lists")
 	}
-	return &resp.Lists[0], nil
+	return &CreateListOutput{List: &resp.Lists[0]}, nil
 }
 
-func (c *Client) UpdateList(_ int, list List) error {
-	result, err := c.Request(http.MethodPut, fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(list.Address), list.Type), list)
+func (c *Client) UpdateList(in *UpdateListInput) error {
+	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(in.List.Address), in.List.Type)
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path, Body: in.List})
 	if err != nil {
 		return err
 	}
 	if result.StatusCode != http.StatusOK {
-		return fmt.Errorf("PUT /api/lists/%s: status %d: %s", list.Address, result.StatusCode, string(result.Body))
+		return fmt.Errorf("PUT /api/lists/%s: status %d: %s", in.List.Address, result.StatusCode, string(result.Body))
 	}
 	return nil
 }
 
-func (c *Client) TriggerGravity() error {
-	result, err := c.Request(http.MethodPost, "/api/action/gravity", nil)
+func (c *Client) TriggerGravity(in *TriggerGravityInput) error {
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPost, Path: "/api/action/gravity"})
 	if err != nil {
 		return err
 	}
@@ -80,9 +87,9 @@ func (c *Client) TriggerGravity() error {
 	return nil
 }
 
-func (c *Client) DeleteList(address string, listType string) error {
-	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(address), listType)
-	result, err := c.Request(http.MethodDelete, path, nil)
+func (c *Client) DeleteList(in *DeleteListInput) error {
+	path := fmt.Sprintf("/api/lists/%s?type=%s", url.PathEscape(in.Address), in.Type)
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err
 	}

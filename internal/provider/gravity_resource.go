@@ -59,7 +59,7 @@ func (r *GravityResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	if err := r.client.TriggerGravity(); err != nil {
+	if err := r.client.TriggerGravity(&pihole.TriggerGravityInput{Ctx: ctx}); err != nil {
 		resp.Diagnostics.AddError("failed to trigger gravity update", err.Error())
 		return
 	}

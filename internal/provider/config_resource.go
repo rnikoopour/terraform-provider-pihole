@@ -140,11 +140,11 @@ type ConfigResource struct {
 }
 
 type ConfigResourceModel struct {
-	ID       types.String `tfsdk:"id"`
-	DNS      types.Object `tfsdk:"dns"`
+	ID        types.String `tfsdk:"id"`
+	DNS       types.Object `tfsdk:"dns"`
 	Webserver types.Object `tfsdk:"webserver"`
-	Misc     types.Object `tfsdk:"misc"`
-	Database types.Object `tfsdk:"database"`
+	Misc      types.Object `tfsdk:"misc"`
+	Database  types.Object `tfsdk:"database"`
 }
 
 func NewConfigResource() resource.Resource { return &ConfigResource{} }
@@ -471,7 +471,7 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	if err := r.client.UpdateServerConfig(cfg); err != nil {
+	if err := r.client.UpdateServerConfig(&pihole.UpdateServerConfigInput{Ctx: ctx, Config: cfg}); err != nil {
 		resp.Diagnostics.AddError("failed to apply config", err.Error())
 		return
 	}
@@ -487,11 +487,12 @@ func (r *ConfigResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	cfg, err := r.client.GetServerConfig()
+	out, err := r.client.GetServerConfig(&pihole.GetServerConfigInput{Ctx: ctx})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read config", err.Error())
 		return
 	}
+	cfg := out.Config
 
 	upstreamVals := make([]attr.Value, len(cfg.DNS.Upstreams))
 	for i, u := range cfg.DNS.Upstreams {
@@ -593,7 +594,7 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	if err := r.client.UpdateServerConfig(cfg); err != nil {
+	if err := r.client.UpdateServerConfig(&pihole.UpdateServerConfigInput{Ctx: ctx, Config: cfg}); err != nil {
 		resp.Diagnostics.AddError("failed to update config", err.Error())
 		return
 	}

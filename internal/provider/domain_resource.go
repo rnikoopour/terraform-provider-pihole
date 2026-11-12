@@ -117,21 +117,24 @@ func (r *DomainResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	d, err := r.client.CreateDomain(pihole.Domain{
-		Domain:  plan.Domain.ValueString(),
-		Type:    plan.Type.ValueString(),
-		Kind:    plan.Kind.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
-		Comment: plan.Comment.ValueString(),
-		Groups:  groupIDs,
+	d, err := r.client.CreateDomain(&pihole.CreateDomainInput{
+		Ctx: ctx,
+		Domain: pihole.Domain{
+			Domain:  plan.Domain.ValueString(),
+			Type:    plan.Type.ValueString(),
+			Kind:    plan.Kind.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+			Comment: plan.Comment.ValueString(),
+			Groups:  groupIDs,
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to create domain", err.Error())
 		return
 	}
 
-	plan.ID = types.StringValue(fmt.Sprintf("%s/%s/%s", d.Type, d.Kind, d.Domain))
-	plan.Comment = types.StringValue(d.Comment)
+	plan.ID = types.StringValue(fmt.Sprintf("%s/%s/%s", d.Domain.Type, d.Domain.Kind, d.Domain.Domain))
+	plan.Comment = types.StringValue(d.Domain.Comment)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -142,24 +145,30 @@ func (r *DomainResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	d, err := r.client.GetDomain(state.Domain.ValueString(), state.Type.ValueString(), state.Kind.ValueString())
+	out, err := r.client.GetDomain(&pihole.GetDomainInput{
+		Ctx:    ctx,
+		Domain: state.Domain.ValueString(),
+		Type:   state.Type.ValueString(),
+		Kind:   state.Kind.ValueString(),
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read domain", err.Error())
 		return
 	}
-	if d == nil {
+	if out.Domain == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
+	d := out.Domain
 
-	groupNames, err := r.client.ResolveGroupIDs(d.Groups)
+	groupNames, err := r.client.ResolveGroupIDs(&pihole.ResolveGroupIDsInput{Ctx: ctx, IDs: d.Groups})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to resolve group IDs", err.Error())
 		return
 	}
 
-	groupVals := make([]attr.Value, len(groupNames))
-	for i, n := range groupNames {
+	groupVals := make([]attr.Value, len(groupNames.Names))
+	for i, n := range groupNames.Names {
 		groupVals[i] = types.StringValue(n)
 	}
 	groups, diags := types.SetValue(types.StringType, groupVals)
@@ -183,12 +192,17 @@ func (r *DomainResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	d, err := r.client.GetDomain(plan.Domain.ValueString(), plan.Type.ValueString(), plan.Kind.ValueString())
+	found, err := r.client.GetDomain(&pihole.GetDomainInput{
+		Ctx:    ctx,
+		Domain: plan.Domain.ValueString(),
+		Type:   plan.Type.ValueString(),
+		Kind:   plan.Kind.ValueString(),
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to look up domain for update", err.Error())
 		return
 	}
-	if d == nil {
+	if found.Domain == nil {
 		resp.Diagnostics.AddError("domain not found", plan.Domain.ValueString())
 		return
 	}
@@ -199,13 +213,17 @@ func (r *DomainResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	err = r.client.UpdateDomain(d.ID, pihole.Domain{
-		Domain:  plan.Domain.ValueString(),
-		Type:    plan.Type.ValueString(),
-		Kind:    plan.Kind.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
-		Comment: plan.Comment.ValueString(),
-		Groups:  groupIDs,
+	err = r.client.UpdateDomain(&pihole.UpdateDomainInput{
+		Ctx: ctx,
+		ID:  found.Domain.ID,
+		Domain: pihole.Domain{
+			Domain:  plan.Domain.ValueString(),
+			Type:    plan.Type.ValueString(),
+			Kind:    plan.Kind.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+			Comment: plan.Comment.ValueString(),
+			Groups:  groupIDs,
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to update domain", err.Error())
@@ -222,7 +240,12 @@ func (r *DomainResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	if err := r.client.DeleteDomain(state.Type.ValueString(), state.Kind.ValueString(), state.Domain.ValueString()); err != nil {
+	if err := r.client.DeleteDomain(&pihole.DeleteDomainInput{
+		Ctx:    ctx,
+		Type:   state.Type.ValueString(),
+		Kind:   state.Kind.ValueString(),
+		Domain: state.Domain.ValueString(),
+	}); err != nil {
 		resp.Diagnostics.AddError("failed to delete domain", err.Error())
 	}
 }
@@ -245,5 +268,9 @@ func (r *DomainResource) resolveGroups(ctx context.Context, groups types.Set) ([
 	if diags := groups.ElementsAs(ctx, &names, false); diags.HasError() {
 		return nil, fmt.Errorf("failed to extract group names")
 	}
-	return r.client.ResolveGroupNames(names)
+	out, err := r.client.ResolveGroupNames(&pihole.ResolveGroupNamesInput{Ctx: ctx, Names: names})
+	if err != nil {
+		return nil, err
+	}
+	return out.IDs, nil
 }

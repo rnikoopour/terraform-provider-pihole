@@ -17,8 +17,9 @@ type Domain struct {
 	Groups  []int  `json:"groups,omitempty"`
 }
 
-func (c *Client) GetDomain(domain, domainType, kind string) (*Domain, error) {
-	result, err := c.Request(http.MethodGet, "/api/domains", nil)
+// GetDomain returns a nil Domain in the output when no matching entry exists.
+func (c *Client) GetDomain(in *GetDomainInput) (*GetDomainOutput, error) {
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodGet, Path: "/api/domains"})
 	if err != nil {
 		return nil, err
 	}
@@ -33,16 +34,16 @@ func (c *Client) GetDomain(domain, domainType, kind string) (*Domain, error) {
 	}
 	for i := range resp.Domains {
 		d := &resp.Domains[i]
-		if d.Domain == domain && d.Type == domainType && d.Kind == kind {
-			return d, nil
+		if d.Domain == in.Domain && d.Type == in.Type && d.Kind == in.Kind {
+			return &GetDomainOutput{Domain: d}, nil
 		}
 	}
-	return nil, nil
+	return &GetDomainOutput{}, nil
 }
 
-func (c *Client) CreateDomain(d Domain) (*Domain, error) {
-	path := fmt.Sprintf("/api/domains/%s/%s", d.Type, d.Kind)
-	result, err := c.Request(http.MethodPost, path, d)
+func (c *Client) CreateDomain(in *CreateDomainInput) (*CreateDomainOutput, error) {
+	path := fmt.Sprintf("/api/domains/%s/%s", in.Domain.Type, in.Domain.Kind)
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPost, Path: path, Body: in.Domain})
 	if err != nil {
 		return nil, err
 	}
@@ -58,23 +59,24 @@ func (c *Client) CreateDomain(d Domain) (*Domain, error) {
 	if len(resp.Domains) == 0 {
 		return nil, fmt.Errorf("create domain response contained no domains")
 	}
-	return &resp.Domains[0], nil
+	return &CreateDomainOutput{Domain: &resp.Domains[0]}, nil
 }
 
-func (c *Client) UpdateDomain(id int, d Domain) error {
-	result, err := c.Request(http.MethodPut, fmt.Sprintf("/api/domains/%d", id), d)
+func (c *Client) UpdateDomain(in *UpdateDomainInput) error {
+	path := fmt.Sprintf("/api/domains/%d", in.ID)
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodPut, Path: path, Body: in.Domain})
 	if err != nil {
 		return err
 	}
 	if result.StatusCode != http.StatusOK {
-		return fmt.Errorf("PUT /api/domains/%d: status %d: %s", id, result.StatusCode, string(result.Body))
+		return fmt.Errorf("PUT %s: status %d: %s", path, result.StatusCode, string(result.Body))
 	}
 	return nil
 }
 
-func (c *Client) DeleteDomain(domainType, kind, domain string) error {
-	path := fmt.Sprintf("/api/domains/%s/%s/%s", domainType, kind, url.PathEscape(domain))
-	result, err := c.Request(http.MethodDelete, path, nil)
+func (c *Client) DeleteDomain(in *DeleteDomainInput) error {
+	path := fmt.Sprintf("/api/domains/%s/%s/%s", in.Type, in.Kind, url.PathEscape(in.Domain))
+	result, err := c.Request(&RequestInput{Ctx: in.Ctx, Method: http.MethodDelete, Path: path})
 	if err != nil {
 		return err
 	}

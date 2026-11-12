@@ -81,18 +81,21 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	group, err := r.client.CreateGroup(pihole.Group{
-		Name:    plan.Name.ValueString(),
-		Comment: plan.Comment.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
+	group, err := r.client.CreateGroup(&pihole.CreateGroupInput{
+		Ctx: ctx,
+		Group: pihole.Group{
+			Name:    plan.Name.ValueString(),
+			Comment: plan.Comment.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to create group", err.Error())
 		return
 	}
 
-	plan.ID = types.StringValue(group.Name)
-	plan.Comment = types.StringValue(group.Comment)
+	plan.ID = types.StringValue(group.Group.Name)
+	plan.Comment = types.StringValue(group.Group.Comment)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -103,18 +106,18 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	group, err := r.client.GetGroup(state.Name.ValueString())
+	out, err := r.client.GetGroup(&pihole.GetGroupInput{Ctx: ctx, Name: state.Name.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to read group", err.Error())
 		return
 	}
-	if group == nil {
+	if out.Group == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	state.Comment = types.StringValue(group.Comment)
-	state.Enabled = types.BoolValue(group.Enabled)
+	state.Comment = types.StringValue(out.Group.Comment)
+	state.Enabled = types.BoolValue(out.Group.Enabled)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -125,9 +128,13 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	err := r.client.UpdateGroup(plan.Name.ValueString(), pihole.Group{
-		Comment: plan.Comment.ValueString(),
-		Enabled: plan.Enabled.ValueBool(),
+	err := r.client.UpdateGroup(&pihole.UpdateGroupInput{
+		Ctx:  ctx,
+		Name: plan.Name.ValueString(),
+		Group: pihole.Group{
+			Comment: plan.Comment.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+		},
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("failed to update group", err.Error())
@@ -149,7 +156,7 @@ func (r *GroupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	if err := r.client.DeleteGroup(state.Name.ValueString()); err != nil {
+	if err := r.client.DeleteGroup(&pihole.DeleteGroupInput{Ctx: ctx, Name: state.Name.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("failed to delete group", err.Error())
 	}
 }
