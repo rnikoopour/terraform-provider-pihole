@@ -70,6 +70,7 @@ func (p *PiholeProvider) Resources(_ context.Context) []func() resource.Resource
 		NewListResource,
 		NewDomainResource,
 		NewGroupResource,
+		NewClientResource,
 		NewDNSRecordResource,
 		NewCNAMERecordResource,
 		NewConfigResource,
