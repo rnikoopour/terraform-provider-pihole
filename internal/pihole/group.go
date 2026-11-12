@@ -52,13 +52,18 @@ func (c *Client) CreateGroup(in *CreateGroupInput) (*CreateGroupOutput, error) {
 	if result.StatusCode != http.StatusCreated && result.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("POST /api/groups: status %d: %s", result.StatusCode, string(result.Body))
 	}
+	// Pi-hole v6 returns the created group inside a "groups" array, not a
+	// single "group" object; parsing the latter silently yields a zero value.
 	var resp struct {
-		Group Group `json:"group"`
+		Groups []Group `json:"groups"`
 	}
 	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		return nil, fmt.Errorf("parse create group response: %w", err)
 	}
-	return &CreateGroupOutput{Group: &resp.Group}, nil
+	if len(resp.Groups) == 0 {
+		return nil, fmt.Errorf("create group response contained no groups")
+	}
+	return &CreateGroupOutput{Group: &resp.Groups[0]}, nil
 }
 
 func (c *Client) UpdateGroup(in *UpdateGroupInput) error {
